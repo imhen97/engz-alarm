@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "ENGZ Alarm",
+    "slug": "engz-alarm",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#121218"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.engz.alarm",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "ENGZ Alarm needs microphone access for voice unlock mode.",
+        "UIBackgroundModes": ["audio", "fetch", "remote-notification"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#121218"
+      },
+      "package": "com.engz.alarm",
+      "permissions": [
+        "RECORD_AUDIO",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
+        "WAKE_LOCK"
+      ],
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "sounds": []
+        }
+      ]
+    ]
+  }
+}
