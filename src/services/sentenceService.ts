@@ -17,6 +17,7 @@ export async function fetchRandomSentence(): Promise<Sentence> {
   return {
     id: 1,
     text: 'Today will be a great day',
+    meaning_ko: '오늘은 멋진 하루가 될 거야',
     pack_id: 'morning_basics',
     difficulty: 1,
   };

@@ -15,6 +15,7 @@ export interface Alarm {
 export interface Sentence {
   id: number;
   text: string;
+  meaning_ko: string;
   pack_id: string;
   difficulty: number; // 1=easy, 2=medium, 3=hard
 }

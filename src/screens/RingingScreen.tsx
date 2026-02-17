@@ -13,7 +13,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppStore } from '../store/useAppStore';
 import { fetchRandomSentence } from '../services/sentenceService';
-import { speak, stopSpeaking } from '../services/ttsService';
+import { startRepeating, stopRepeating } from '../services/ttsService';
 import { checkVoiceMatch, checkTypingMatch } from '../services/matchService';
 import VoiceIndicator from '../components/VoiceIndicator';
 import { VoiceState, Sentence, UnlockMode } from '../types';
@@ -54,17 +54,20 @@ export default function RingingScreen() {
     return () => {
       backHandler.remove();
       stopVibration();
-      stopSpeaking();
+      stopRepeating();
     };
   }, []);
 
-  // Auto-play TTS when sentence loads
+  // Auto-play repeating TTS when sentence loads (EN → KO → repeat)
   useEffect(() => {
     if (sentence) {
       setTimeout(() => {
-        speak(sentence.text);
+        startRepeating(sentence.text, sentence.meaning_ko);
       }, 500);
     }
+    return () => {
+      stopRepeating();
+    };
   }, [sentence]);
 
   const loadSentence = async () => {
@@ -82,7 +85,8 @@ export default function RingingScreen() {
 
   const handleReplay = () => {
     if (sentence) {
-      speak(sentence.text);
+      stopRepeating();
+      startRepeating(sentence.text, sentence.meaning_ko);
     }
   };
 
@@ -151,7 +155,7 @@ export default function RingingScreen() {
   const handleUnlock = () => {
     setUnlocked(true);
     stopVibration();
-    stopSpeaking();
+    stopRepeating();
 
     setTimeout(() => {
       clearRinging();
@@ -165,7 +169,7 @@ export default function RingingScreen() {
   const handleSnooze = () => {
     if (!settings.snooze_enabled) return;
     stopVibration();
-    stopSpeaking();
+    stopRepeating();
     clearRinging();
     navigation.reset({
       index: 0,
@@ -213,8 +217,9 @@ export default function RingingScreen() {
       <View style={styles.sentenceContainer}>
         <Text style={styles.sentenceLabel}>Repeat this sentence:</Text>
         <Text style={styles.sentence}>"{sentence?.text ?? '...'}"</Text>
+        <Text style={styles.meaningKo}>{sentence?.meaning_ko ?? ''}</Text>
         <TouchableOpacity onPress={handleReplay} style={styles.replayBtn}>
-          <Text style={styles.replayText}>🔊 Play again</Text>
+          <Text style={styles.replayText}>🔊 다시 듣기</Text>
         </TouchableOpacity>
       </View>
 
@@ -364,6 +369,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     lineHeight: 32,
+    marginBottom: 8,
+  },
+  meaningKo: {
+    fontSize: 16,
+    color: '#AABBFF',
+    textAlign: 'center',
+    lineHeight: 24,
     marginBottom: 16,
   },
   replayBtn: {

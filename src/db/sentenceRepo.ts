@@ -13,8 +13,8 @@ export async function insertSentences(sentences: Sentence[]): Promise<void> {
   const db = await getDatabase();
   for (const s of sentences) {
     await db.runAsync(
-      'INSERT OR REPLACE INTO sentences (id, text, pack_id, difficulty) VALUES (?, ?, ?, ?)',
-      [s.id, s.text, s.pack_id, s.difficulty]
+      'INSERT OR REPLACE INTO sentences (id, text, meaning_ko, pack_id, difficulty) VALUES (?, ?, ?, ?, ?)',
+      [s.id, s.text, s.meaning_ko, s.pack_id, s.difficulty]
     );
   }
 }

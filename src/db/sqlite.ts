@@ -25,6 +25,7 @@ async function initializeDatabase(database: SQLite.SQLiteDatabase): Promise<void
     CREATE TABLE IF NOT EXISTS sentences (
       id INTEGER PRIMARY KEY,
       text TEXT NOT NULL,
+      meaning_ko TEXT NOT NULL DEFAULT '',
       pack_id TEXT NOT NULL DEFAULT 'morning_basics',
       difficulty INTEGER NOT NULL DEFAULT 1
     );
@@ -34,4 +35,22 @@ async function initializeDatabase(database: SQLite.SQLiteDatabase): Promise<void
       value TEXT NOT NULL
     );
   `);
+
+  // Migration: add meaning_ko column if upgrading from old schema
+  try {
+    await database.execAsync(
+      `ALTER TABLE sentences ADD COLUMN meaning_ko TEXT NOT NULL DEFAULT ''`
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+
+  // Re-seed sentences so meaning_ko values are populated
+  const row = await database.getFirstAsync<{ mk: string }>(
+    `SELECT meaning_ko as mk FROM sentences WHERE id = 1`
+  );
+  if (row && !row.mk) {
+    // Old data without Korean meanings — drop and let app re-insert
+    await database.execAsync(`DELETE FROM sentences`);
+  }
 }
