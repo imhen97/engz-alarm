@@ -1,55 +1,96 @@
 /**
- * Speech recognition service.
- *
- * Note: Full native speech-to-text (react-native-voice) requires a development build
- * (not available in Expo Go). For MVP, we provide a simulated voice recognition
- * that works in Expo Go, with hooks for the real implementation.
- *
- * In production (development build), replace the mock with react-native-voice.
+ * Speech recognition service using expo-speech-recognition.
+ * Listens for English speech and returns recognized text.
  */
+import {
+  ExpoSpeechRecognitionModule,
+  type ExpoSpeechRecognitionNativeEventMap,
+} from 'expo-speech-recognition';
 
-type SpeechCallback = (text: string) => void;
+type ResultCallback = (text: string) => void;
 type ErrorCallback = (error: string) => void;
 
-let onResultCallback: SpeechCallback | null = null;
-let onErrorCallback: ErrorCallback | null = null;
-let isListening = false;
+let _onResult: ResultCallback | null = null;
+let _onError: ErrorCallback | null = null;
+let _isListening = false;
 
+/** Request microphone + speech recognition permissions */
+export async function requestSpeechPermissions(): Promise<boolean> {
+  const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+  return result.granted;
+}
+
+/** Set callbacks for speech results and errors */
 export function setSpeechCallbacks(
-  onResult: SpeechCallback,
-  onError: ErrorCallback
+  onResult: ResultCallback,
+  onError: ErrorCallback,
 ): void {
-  onResultCallback = onResult;
-  onErrorCallback = onError;
+  _onResult = onResult;
+  _onError = onError;
 }
 
-export function startListening(): void {
-  isListening = true;
-  // In production, this would call Voice.start('en-US')
-  // For Expo Go MVP, voice input is handled via typing fallback
+/** Start listening for speech (English) */
+export async function startListening(): Promise<void> {
+  if (_isListening) return;
+
+  const granted = await requestSpeechPermissions();
+  if (!granted) {
+    _onError?.('Microphone permission denied');
+    return;
+  }
+
+  _isListening = true;
+
+  // Register event listeners
+  const resultSub = ExpoSpeechRecognitionModule.addListener(
+    'result',
+    (event: ExpoSpeechRecognitionNativeEventMap['result']) => {
+      if (event.isFinal && event.results && event.results.length > 0) {
+        const transcript = event.results[0]?.transcript ?? '';
+        if (transcript) {
+          _onResult?.(transcript);
+        }
+        cleanup();
+      }
+    },
+  );
+
+  const errorSub = ExpoSpeechRecognitionModule.addListener(
+    'error',
+    (event: ExpoSpeechRecognitionNativeEventMap['error']) => {
+      _onError?.(event.error ?? 'Speech recognition error');
+      cleanup();
+    },
+  );
+
+  const endSub = ExpoSpeechRecognitionModule.addListener('end', () => {
+    cleanup();
+  });
+
+  function cleanup() {
+    _isListening = false;
+    resultSub.remove();
+    errorSub.remove();
+    endSub.remove();
+  }
+
+  // Start recognition
+  ExpoSpeechRecognitionModule.start({
+    lang: 'en-US',
+    interimResults: false,
+    maxAlternatives: 1,
+  });
 }
 
+/** Stop listening */
 export function stopListening(): void {
-  isListening = false;
-  // In production, this would call Voice.stop()
+  if (_isListening) {
+    ExpoSpeechRecognitionModule.stop();
+    _isListening = false;
+  }
 }
 
+/** Check if currently listening */
 export function getIsListening(): boolean {
-  return isListening;
-}
-
-/**
- * Simulate a voice result (for testing / Expo Go).
- * In production, react-native-voice's onSpeechResults would call this.
- */
-export function simulateVoiceResult(text: string): void {
-  if (onResultCallback) {
-    onResultCallback(text);
-  }
-}
-
-export function reportError(error: string): void {
-  if (onErrorCallback) {
-    onErrorCallback(error);
-  }
+  return _isListening;
 }

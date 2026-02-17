@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,11 @@ import { useAppStore } from '../store/useAppStore';
 import { fetchRandomSentence } from '../services/sentenceService';
 import { startRepeating, stopRepeating } from '../services/ttsService';
 import { checkVoiceMatch, checkTypingMatch } from '../services/matchService';
+import {
+  setSpeechCallbacks,
+  startListening,
+  stopListening,
+} from '../services/speechService';
 import VoiceIndicator from '../components/VoiceIndicator';
 import { VoiceState, Sentence, UnlockMode } from '../types';
 import { formatTime12 } from '../utils/time';
@@ -23,25 +28,28 @@ import { RootStackParamList } from '../navigation/types';
 type RingingNav = NativeStackNavigationProp<RootStackParamList, 'Ringing'>;
 type RingingRoute = RouteProp<RootStackParamList, 'Ringing'>;
 
+const VOICE_THRESHOLD = 0.8; // 80% accuracy required
+const MAX_VOICE_RETRIES = 5;
+
 export default function RingingScreen() {
   const navigation = useNavigation<RingingNav>();
   const route = useRoute<RingingRoute>();
 
-  const { alarmId, unlockMode: initialMode } = route.params;
+  const { alarmId } = route.params;
   const { alarms, settings, clearRinging } = useAppStore();
 
   const alarm = alarms.find((a) => a.id === alarmId);
   const [sentence, setSentence] = useState<Sentence | null>(null);
-  const [mode, setMode] = useState<UnlockMode>(initialMode as UnlockMode);
+  const [mode, setMode] = useState<UnlockMode>('voice'); // Always start with voice
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [voiceRetries, setVoiceRetries] = useState(0);
+  const [lastScore, setLastScore] = useState<number | null>(null);
   const [typedText, setTypedText] = useState('');
   const [typingError, setTypingError] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [spokenText, setSpokenText] = useState('');
 
   const vibrationRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const MAX_RETRIES = 3;
 
   // Load sentence and start alarm
   useEffect(() => {
@@ -55,6 +63,7 @@ export default function RingingScreen() {
       backHandler.remove();
       stopVibration();
       stopRepeating();
+      stopListening();
     };
   }, []);
 
@@ -69,6 +78,20 @@ export default function RingingScreen() {
       stopRepeating();
     };
   }, [sentence]);
+
+  // Set up speech recognition callbacks
+  useEffect(() => {
+    setSpeechCallbacks(
+      (spoken: string) => {
+        handleVoiceResult(spoken);
+      },
+      (_error: string) => {
+        setVoiceState('fail');
+        setSpokenText('');
+        setLastScore(null);
+      },
+    );
+  }, [sentence, voiceRetries]);
 
   const loadSentence = async () => {
     const s = await fetchRandomSentence();
@@ -90,24 +113,16 @@ export default function RingingScreen() {
     }
   };
 
-  // Voice mode handlers
+  // ── Voice mode handlers ──
+
   const handleStartListening = async () => {
     if (!sentence) return;
+    // Pause TTS while listening so it doesn't interfere
+    stopRepeating();
     setVoiceState('listening');
-
-    try {
-      // Using expo-speech for TTS and simple matching
-      // In production, react-native-voice would handle this
-      // For MVP, we simulate voice capture with a prompt
-      // The actual voice recognition will be handled by the platform
-      setVoiceState('listening');
-
-      // Note: In a full implementation, react-native-voice would be used here
-      // For now, we provide a fallback button approach
-    } catch (error) {
-      setVoiceState('fail');
-      handleVoiceFail();
-    }
+    setSpokenText('');
+    setLastScore(null);
+    await startListening();
   };
 
   const handleVoiceResult = (spoken: string) => {
@@ -116,26 +131,41 @@ export default function RingingScreen() {
     setVoiceState('processing');
 
     const result = checkVoiceMatch(sentence.text, spoken);
+    setLastScore(Math.round(result.score * 100));
 
-    if (result.success) {
-      setVoiceState('success');
-      handleUnlock();
-    } else {
-      setVoiceState('fail');
-      handleVoiceFail();
-    }
+    setTimeout(() => {
+      if (result.success) {
+        setVoiceState('success');
+        handleUnlock();
+      } else {
+        setVoiceState('fail');
+        handleVoiceFail();
+      }
+    }, 500);
   };
 
   const handleVoiceFail = () => {
     const newRetries = voiceRetries + 1;
     setVoiceRetries(newRetries);
 
-    if (newRetries >= MAX_RETRIES) {
-      // Switch to typing mode
+    if (newRetries >= MAX_VOICE_RETRIES) {
+      // Switch to typing mode after too many fails
       setMode('typing');
       setVoiceState('idle');
     }
   };
+
+  const handleRetry = () => {
+    setVoiceState('idle');
+    setSpokenText('');
+    setLastScore(null);
+    // Resume TTS
+    if (sentence) {
+      startRepeating(sentence.text, sentence.meaning_ko);
+    }
+  };
+
+  // ── Typing mode handler ──
 
   const handleTypingSubmit = () => {
     if (!sentence) return;
@@ -152,10 +182,13 @@ export default function RingingScreen() {
     }
   };
 
+  // ── Unlock / Snooze ──
+
   const handleUnlock = () => {
     setUnlocked(true);
     stopVibration();
     stopRepeating();
+    stopListening();
 
     setTimeout(() => {
       clearRinging();
@@ -170,12 +203,12 @@ export default function RingingScreen() {
     if (!settings.snooze_enabled) return;
     stopVibration();
     stopRepeating();
+    stopListening();
     clearRinging();
     navigation.reset({
       index: 0,
       routes: [{ name: 'Home' }],
     });
-    // In production, would reschedule alarm for snooze_minutes later
   };
 
   // Emergency fallback (hidden)
@@ -215,7 +248,7 @@ export default function RingingScreen() {
 
       {/* Sentence */}
       <View style={styles.sentenceContainer}>
-        <Text style={styles.sentenceLabel}>Repeat this sentence:</Text>
+        <Text style={styles.sentenceLabel}>이 문장을 따라 말하세요:</Text>
         <Text style={styles.sentence}>"{sentence?.text ?? '...'}"</Text>
         <Text style={styles.meaningKo}>{sentence?.meaning_ko ?? ''}</Text>
         <TouchableOpacity onPress={handleReplay} style={styles.replayBtn}>
@@ -229,12 +262,50 @@ export default function RingingScreen() {
           <View style={styles.voiceArea}>
             <VoiceIndicator state={voiceState} />
 
+            {/* Score feedback */}
+            {lastScore !== null && (
+              <View style={styles.scoreContainer}>
+                <Text style={[
+                  styles.scoreText,
+                  { color: lastScore >= VOICE_THRESHOLD * 100 ? '#4CAF50' : '#F44336' },
+                ]}>
+                  정확도: {lastScore}%
+                </Text>
+                <View style={styles.scoreBarBg}>
+                  <View
+                    style={[
+                      styles.scoreBarFill,
+                      {
+                        width: `${lastScore}%`,
+                        backgroundColor: lastScore >= VOICE_THRESHOLD * 100 ? '#4CAF50' : '#F44336',
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.thresholdLine,
+                      { left: `${VOICE_THRESHOLD * 100}%` },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.thresholdText}>
+                  {VOICE_THRESHOLD * 100}% 이상이면 통과
+                </Text>
+              </View>
+            )}
+
+            {/* Spoken text feedback */}
+            {spokenText ? (
+              <Text style={styles.spokenText}>인식된 음성: "{spokenText}"</Text>
+            ) : null}
+
+            {/* Action buttons */}
             {voiceState === 'idle' && (
               <TouchableOpacity
                 style={styles.speakBtn}
                 onPress={handleStartListening}
               >
-                <Text style={styles.speakBtnText}>Tap to Speak</Text>
+                <Text style={styles.speakBtnText}>🎤 탭하고 말하기</Text>
               </TouchableOpacity>
             )}
 
@@ -242,39 +313,37 @@ export default function RingingScreen() {
               <View style={styles.failActions}>
                 <TouchableOpacity
                   style={styles.retryBtn}
-                  onPress={() => setVoiceState('idle')}
+                  onPress={handleRetry}
                 >
                   <Text style={styles.retryBtnText}>
-                    Try Again ({MAX_RETRIES - voiceRetries} left)
+                    다시 시도 ({MAX_VOICE_RETRIES - voiceRetries}회 남음)
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.switchBtn}
-                  onPress={() => setMode('typing')}
-                >
-                  <Text style={styles.switchBtnText}>Switch to Typing</Text>
-                </TouchableOpacity>
+                {voiceRetries >= 3 && (
+                  <TouchableOpacity
+                    style={styles.switchBtn}
+                    onPress={() => setMode('typing')}
+                  >
+                    <Text style={styles.switchBtnText}>타이핑으로 전환</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
-            {spokenText ? (
-              <Text style={styles.spokenText}>You said: "{spokenText}"</Text>
-            ) : null}
-
-            {voiceRetries > 0 && voiceRetries < MAX_RETRIES && (
+            {voiceRetries > 0 && voiceRetries < MAX_VOICE_RETRIES && voiceState !== 'fail' && (
               <Text style={styles.retryCount}>
-                Attempt {voiceRetries + 1} of {MAX_RETRIES}
+                시도 {voiceRetries}/{MAX_VOICE_RETRIES}
               </Text>
             )}
           </View>
         ) : (
           <View style={styles.typingArea}>
-            <Text style={styles.typingLabel}>Type the sentence below:</Text>
+            <Text style={styles.typingLabel}>문장을 타이핑하세요:</Text>
             <TextInput
               style={[styles.typingInput, typingError && styles.typingInputError]}
               value={typedText}
               onChangeText={setTypedText}
-              placeholder="Type here..."
+              placeholder="여기에 영어 문장을 입력..."
               placeholderTextColor="#666"
               autoCapitalize="none"
               autoCorrect={false}
@@ -289,11 +358,23 @@ export default function RingingScreen() {
               onPress={handleTypingSubmit}
               disabled={typedText.length === 0}
             >
-              <Text style={styles.submitBtnText}>Submit</Text>
+              <Text style={styles.submitBtnText}>제출</Text>
             </TouchableOpacity>
             {typingError && (
-              <Text style={styles.errorText}>Not quite right. Try again!</Text>
+              <Text style={styles.errorText}>정확하지 않아요. 다시 시도해보세요!</Text>
             )}
+            <TouchableOpacity
+              style={styles.switchBtn}
+              onPress={() => {
+                setMode('voice');
+                setVoiceState('idle');
+                setVoiceRetries(0);
+                setLastScore(null);
+                setSpokenText('');
+              }}
+            >
+              <Text style={styles.switchBtnText}>음성 인식으로 전환</Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -302,7 +383,7 @@ export default function RingingScreen() {
       {settings.snooze_enabled && (
         <TouchableOpacity style={styles.snoozeBtn} onPress={handleSnooze}>
           <Text style={styles.snoozeText}>
-            Snooze ({settings.snooze_minutes} min)
+            스누즈 ({settings.snooze_minutes}분)
           </Text>
         </TouchableOpacity>
       )}
@@ -338,7 +419,7 @@ const styles = StyleSheet.create({
   },
   timeArea: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   time: {
     fontSize: 56,
@@ -355,7 +436,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E1E2E',
     borderRadius: 20,
     padding: 24,
-    marginBottom: 32,
+    marginBottom: 24,
     alignItems: 'center',
   },
   sentenceLabel: {
@@ -394,7 +475,7 @@ const styles = StyleSheet.create({
   },
   voiceArea: {
     alignItems: 'center',
-    gap: 20,
+    gap: 16,
   },
   speakBtn: {
     backgroundColor: '#4CAF50',
@@ -406,6 +487,38 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  scoreContainer: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 6,
+  },
+  scoreText: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  scoreBarBg: {
+    width: '80%',
+    height: 10,
+    backgroundColor: '#2a2a3e',
+    borderRadius: 5,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  scoreBarFill: {
+    height: '100%',
+    borderRadius: 5,
+  },
+  thresholdLine: {
+    position: 'absolute',
+    top: 0,
+    width: 2,
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+  },
+  thresholdText: {
+    fontSize: 12,
+    color: '#888',
   },
   failActions: {
     gap: 12,

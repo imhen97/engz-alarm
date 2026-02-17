@@ -43,6 +43,13 @@
         {
           "sounds": []
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "ENGZ Alarm needs microphone access to recognize your voice for alarm unlock.",
+          "speechRecognitionPermission": "ENGZ Alarm needs speech recognition to verify your spoken sentence."
+        }
       ]
     ]
   }
