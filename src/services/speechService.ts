@@ -1,11 +1,8 @@
 /**
- * Speech recognition service using expo-speech-recognition.
- * Listens for English speech and returns recognized text.
+ * Speech recognition service.
+ * Uses expo-speech-recognition when available (Development Build),
+ * gracefully falls back when unavailable (Expo Go).
  */
-import {
-  ExpoSpeechRecognitionModule,
-  type ExpoSpeechRecognitionNativeEventMap,
-} from 'expo-speech-recognition';
 
 type ResultCallback = (text: string) => void;
 type ErrorCallback = (error: string) => void;
@@ -14,9 +11,26 @@ let _onResult: ResultCallback | null = null;
 let _onError: ErrorCallback | null = null;
 let _isListening = false;
 
+// Dynamically import to avoid crash in Expo Go
+let SpeechModule: any = null;
+let _available = false;
+
+try {
+  SpeechModule = require('expo-speech-recognition').ExpoSpeechRecognitionModule;
+  _available = true;
+} catch {
+  _available = false;
+}
+
+/** Check if speech recognition is available on this device/build */
+export function isSpeechRecognitionAvailable(): boolean {
+  return _available;
+}
+
 /** Request microphone + speech recognition permissions */
 export async function requestSpeechPermissions(): Promise<boolean> {
-  const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+  if (!_available) return false;
+  const result = await SpeechModule.requestPermissionsAsync();
   return result.granted;
 }
 
@@ -31,6 +45,10 @@ export function setSpeechCallbacks(
 
 /** Start listening for speech (English) */
 export async function startListening(): Promise<void> {
+  if (!_available) {
+    _onError?.('Speech recognition not available (requires Development Build)');
+    return;
+  }
   if (_isListening) return;
 
   const granted = await requestSpeechPermissions();
@@ -41,10 +59,9 @@ export async function startListening(): Promise<void> {
 
   _isListening = true;
 
-  // Register event listeners
-  const resultSub = ExpoSpeechRecognitionModule.addListener(
+  const resultSub = SpeechModule.addListener(
     'result',
-    (event: ExpoSpeechRecognitionNativeEventMap['result']) => {
+    (event: any) => {
       if (event.isFinal && event.results && event.results.length > 0) {
         const transcript = event.results[0]?.transcript ?? '';
         if (transcript) {
@@ -55,15 +72,15 @@ export async function startListening(): Promise<void> {
     },
   );
 
-  const errorSub = ExpoSpeechRecognitionModule.addListener(
+  const errorSub = SpeechModule.addListener(
     'error',
-    (event: ExpoSpeechRecognitionNativeEventMap['error']) => {
+    (event: any) => {
       _onError?.(event.error ?? 'Speech recognition error');
       cleanup();
     },
   );
 
-  const endSub = ExpoSpeechRecognitionModule.addListener('end', () => {
+  const endSub = SpeechModule.addListener('end', () => {
     cleanup();
   });
 
@@ -74,8 +91,7 @@ export async function startListening(): Promise<void> {
     endSub.remove();
   }
 
-  // Start recognition
-  ExpoSpeechRecognitionModule.start({
+  SpeechModule.start({
     lang: 'en-US',
     interimResults: false,
     maxAlternatives: 1,
@@ -84,8 +100,8 @@ export async function startListening(): Promise<void> {
 
 /** Stop listening */
 export function stopListening(): void {
-  if (_isListening) {
-    ExpoSpeechRecognitionModule.stop();
+  if (_available && _isListening) {
+    SpeechModule.stop();
     _isListening = false;
   }
 }

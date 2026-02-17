@@ -19,6 +19,7 @@ import {
   setSpeechCallbacks,
   startListening,
   stopListening,
+  isSpeechRecognitionAvailable,
 } from '../services/speechService';
 import VoiceIndicator from '../components/VoiceIndicator';
 import { VoiceState, Sentence, UnlockMode } from '../types';
@@ -40,7 +41,8 @@ export default function RingingScreen() {
 
   const alarm = alarms.find((a) => a.id === alarmId);
   const [sentence, setSentence] = useState<Sentence | null>(null);
-  const [mode, setMode] = useState<UnlockMode>('voice'); // Always start with voice
+  const speechAvailable = isSpeechRecognitionAvailable();
+  const [mode, setMode] = useState<UnlockMode>(speechAvailable ? 'voice' : 'typing');
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [voiceRetries, setVoiceRetries] = useState(0);
   const [lastScore, setLastScore] = useState<number | null>(null);
@@ -81,6 +83,7 @@ export default function RingingScreen() {
 
   // Set up speech recognition callbacks
   useEffect(() => {
+    if (!speechAvailable) return;
     setSpeechCallbacks(
       (spoken: string) => {
         handleVoiceResult(spoken);
@@ -363,18 +366,20 @@ export default function RingingScreen() {
             {typingError && (
               <Text style={styles.errorText}>정확하지 않아요. 다시 시도해보세요!</Text>
             )}
-            <TouchableOpacity
-              style={styles.switchBtn}
-              onPress={() => {
-                setMode('voice');
-                setVoiceState('idle');
-                setVoiceRetries(0);
-                setLastScore(null);
-                setSpokenText('');
-              }}
-            >
-              <Text style={styles.switchBtnText}>음성 인식으로 전환</Text>
-            </TouchableOpacity>
+            {speechAvailable && (
+              <TouchableOpacity
+                style={styles.switchBtn}
+                onPress={() => {
+                  setMode('voice');
+                  setVoiceState('idle');
+                  setVoiceRetries(0);
+                  setLastScore(null);
+                  setSpokenText('');
+                }}
+              >
+                <Text style={styles.switchBtnText}>음성 인식으로 전환</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </View>
