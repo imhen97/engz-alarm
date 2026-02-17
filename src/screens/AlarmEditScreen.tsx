@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import ScrollPicker from '../components/ScrollPicker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { v4 as uuidv4 } from 'uuid';
@@ -92,23 +93,8 @@ export default function AlarmEditScreen() {
     ]);
   };
 
-  const adjustHour = (delta: number) => {
-    setHour((prev) => {
-      const next = prev + delta;
-      if (next < 0) return 23;
-      if (next > 23) return 0;
-      return next;
-    });
-  };
-
-  const adjustMinute = (delta: number) => {
-    setMinute((prev) => {
-      const next = prev + delta;
-      if (next < 0) return 59;
-      if (next > 59) return 0;
-      return next;
-    });
-  };
+  const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
+  const minutes = useMemo(() => Array.from({ length: 60 }, (_, i) => i), []);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -116,31 +102,17 @@ export default function AlarmEditScreen() {
 
       {/* Time Picker */}
       <View style={styles.timeContainer}>
-        <View style={styles.timeColumn}>
-          <TouchableOpacity onPress={() => adjustHour(1)} style={styles.arrowBtn}>
-            <Text style={styles.arrow}>▲</Text>
-          </TouchableOpacity>
-          <Text style={styles.timeDigit}>
-            {hour.toString().padStart(2, '0')}
-          </Text>
-          <TouchableOpacity onPress={() => adjustHour(-1)} style={styles.arrowBtn}>
-            <Text style={styles.arrow}>▼</Text>
-          </TouchableOpacity>
-        </View>
-
+        <ScrollPicker
+          values={hours}
+          selectedValue={hour}
+          onValueChange={setHour}
+        />
         <Text style={styles.timeSeparator}>:</Text>
-
-        <View style={styles.timeColumn}>
-          <TouchableOpacity onPress={() => adjustMinute(1)} style={styles.arrowBtn}>
-            <Text style={styles.arrow}>▲</Text>
-          </TouchableOpacity>
-          <Text style={styles.timeDigit}>
-            {minute.toString().padStart(2, '0')}
-          </Text>
-          <TouchableOpacity onPress={() => adjustMinute(-1)} style={styles.arrowBtn}>
-            <Text style={styles.arrow}>▼</Text>
-          </TouchableOpacity>
-        </View>
+        <ScrollPicker
+          values={minutes}
+          selectedValue={minute}
+          onValueChange={setMinute}
+        />
       </View>
 
       {/* Repeat Days */}
@@ -247,29 +219,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 32,
   },
-  timeColumn: {
-    alignItems: 'center',
-  },
-  arrowBtn: {
-    padding: 12,
-  },
-  arrow: {
-    fontSize: 24,
-    color: '#888',
-  },
-  timeDigit: {
-    fontSize: 64,
-    fontWeight: '300',
-    color: '#FFFFFF',
-    width: 100,
-    textAlign: 'center',
-  },
   timeSeparator: {
-    fontSize: 64,
+    fontSize: 48,
     fontWeight: '300',
     color: '#FFFFFF',
     marginHorizontal: 8,
-    marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 16,
