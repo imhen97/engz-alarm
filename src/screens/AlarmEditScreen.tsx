@@ -7,20 +7,21 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  Platform,
 } from 'react-native';
 import ScrollPicker from '../components/ScrollPicker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { v4 as uuidv4 } from 'uuid';
 import { useAppStore } from '../store/useAppStore';
 import { Alarm, UnlockMode, DAYS } from '../types';
-import { daysToRepeatMask, repeatMaskToDays } from '../utils/time';
-import { scheduleAlarm, rescheduleAllAlarms } from '../services/alarmScheduler';
+import { daysToRepeatMask } from '../utils/time';
+import { rescheduleAllAlarms } from '../services/alarmScheduler';
 import { RootStackParamList } from '../navigation/types';
+import { colors, shadows, borderRadius } from '../theme';
 
 type EditNav = NativeStackNavigationProp<RootStackParamList, 'AlarmEdit'>;
 type EditRoute = RouteProp<RootStackParamList, 'AlarmEdit'>;
+
+const DAY_LABELS_KO = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function AlarmEditScreen() {
   const navigation = useNavigation<EditNav>();
@@ -32,8 +33,22 @@ export default function AlarmEditScreen() {
     ? alarms.find((a) => a.id === editingId)
     : null;
 
-  const [hour, setHour] = useState(existingAlarm?.hour ?? 7);
+  const initHour24 = existingAlarm?.hour ?? 7;
+  const [displayHour, setDisplayHour] = useState(() => {
+    const h = initHour24 % 12;
+    return h === 0 ? 12 : h;
+  });
+  const [isAM, setIsAM] = useState(initHour24 < 12);
   const [minute, setMinute] = useState(existingAlarm?.minute ?? 0);
+
+  const getHour24 = () => {
+    if (isAM) {
+      return displayHour === 12 ? 0 : displayHour;
+    } else {
+      return displayHour === 12 ? 12 : displayHour + 12;
+    }
+  };
+
   const [selectedDays, setSelectedDays] = useState<number[]>(() => {
     if (!existingAlarm) return [];
     const days: number[] = [];
@@ -53,9 +68,14 @@ export default function AlarmEditScreen() {
     );
   };
 
+  const generateId = () => {
+    return Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
+  };
+
   const handleSave = async () => {
+    const hour = getHour24();
     const alarm: Alarm = {
-      id: editingId ?? uuidv4(),
+      id: editingId ?? generateId(),
       hour,
       minute,
       repeat_mask: daysToRepeatMask(selectedDays),
@@ -78,10 +98,10 @@ export default function AlarmEditScreen() {
 
   const handleDelete = () => {
     if (!editingId) return;
-    Alert.alert('Delete Alarm', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert('알람 삭제', '정말 삭제하시겠어요?', [
+      { text: '취소', style: 'cancel' },
       {
-        text: 'Delete',
+        text: '삭제',
         style: 'destructive',
         onPress: async () => {
           await removeAlarm(editingId);
@@ -93,32 +113,61 @@ export default function AlarmEditScreen() {
     ]);
   };
 
-  const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
+  const hours12 = useMemo(() => [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], []);
   const minutes = useMemo(() => Array.from({ length: 60 }, (_, i) => i), []);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{editingId ? 'Edit Alarm' : 'New Alarm'}</Text>
+      {/* Back button */}
+      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <Text style={styles.backBtnText}>← 뒤로</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.title}>
+        {editingId ? '알람 수정' : '새 알람'} {isAM ? '☀️' : '🌙'}
+      </Text>
+
+      {/* AM/PM Toggle */}
+      <View style={styles.ampmRow}>
+        <TouchableOpacity
+          style={[styles.ampmBtn, isAM && styles.ampmBtnActive]}
+          onPress={() => setIsAM(true)}
+        >
+          <Text style={[styles.ampmText, isAM && styles.ampmTextActive]}>
+            ☀️ 오전
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.ampmBtn, !isAM && styles.ampmBtnActive]}
+          onPress={() => setIsAM(false)}
+        >
+          <Text style={[styles.ampmText, !isAM && styles.ampmTextActive]}>
+            🌙 오후
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Time Picker */}
-      <View style={styles.timeContainer}>
-        <ScrollPicker
-          values={hours}
-          selectedValue={hour}
-          onValueChange={setHour}
-        />
-        <Text style={styles.timeSeparator}>:</Text>
-        <ScrollPicker
-          values={minutes}
-          selectedValue={minute}
-          onValueChange={setMinute}
-        />
+      <View style={styles.pickerCard}>
+        <View style={styles.timeContainer}>
+          <ScrollPicker
+            values={hours12}
+            selectedValue={displayHour}
+            onValueChange={setDisplayHour}
+          />
+          <Text style={styles.timeSeparator}>:</Text>
+          <ScrollPicker
+            values={minutes}
+            selectedValue={minute}
+            onValueChange={setMinute}
+          />
+        </View>
       </View>
 
       {/* Repeat Days */}
-      <Text style={styles.sectionTitle}>Repeat</Text>
+      <Text style={styles.sectionTitle}>반복</Text>
       <View style={styles.daysRow}>
-        {DAYS.map((day, idx) => (
+        {DAY_LABELS_KO.map((day, idx) => (
           <TouchableOpacity
             key={day}
             style={[styles.dayBtn, selectedDays.includes(idx) && styles.dayBtnActive]}
@@ -137,7 +186,7 @@ export default function AlarmEditScreen() {
       </View>
 
       {/* Unlock Mode */}
-      <Text style={styles.sectionTitle}>Unlock Mode</Text>
+      <Text style={styles.sectionTitle}>해제 방법</Text>
       <View style={styles.modeRow}>
         <TouchableOpacity
           style={[styles.modeBtn, unlockMode === 'voice' && styles.modeBtnActive]}
@@ -150,7 +199,7 @@ export default function AlarmEditScreen() {
               unlockMode === 'voice' && styles.modeTextActive,
             ]}
           >
-            Voice
+            음성
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -164,33 +213,33 @@ export default function AlarmEditScreen() {
               unlockMode === 'typing' && styles.modeTextActive,
             ]}
           >
-            Typing
+            타이핑
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* Label */}
-      <Text style={styles.sectionTitle}>Label (optional)</Text>
+      <Text style={styles.sectionTitle}>라벨 (선택)</Text>
       <TextInput
         style={styles.input}
         value={label}
         onChangeText={setLabel}
-        placeholder="e.g., Wake up for work"
-        placeholderTextColor="#666"
+        placeholder="예: 출근 준비"
+        placeholderTextColor={colors.textMuted}
         maxLength={50}
       />
 
       {/* Save Button */}
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
         <Text style={styles.saveBtnText}>
-          {editingId ? 'Save Changes' : 'Create Alarm'}
+          {editingId ? '저장' : '알람 만들기'} ✨
         </Text>
       </TouchableOpacity>
 
       {/* Delete Button */}
       {editingId && (
         <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-          <Text style={styles.deleteBtnText}>Delete Alarm</Text>
+          <Text style={styles.deleteBtnText}>알람 삭제</Text>
         </TouchableOpacity>
       )}
     </ScrollView>
@@ -200,35 +249,77 @@ export default function AlarmEditScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121218',
+    backgroundColor: colors.background,
   },
   content: {
     padding: 20,
-    paddingTop: 60,
+    paddingTop: 56,
     paddingBottom: 40,
+  },
+  backBtn: {
+    marginBottom: 8,
+  },
+  backBtnText: {
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: '500',
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 32,
+    color: colors.textPrimary,
+    marginBottom: 24,
+  },
+  ampmRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  ampmBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    ...shadows.card,
+  },
+  ampmBtnActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  ampmText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textMuted,
+  },
+  ampmTextActive: {
+    color: colors.primary,
+  },
+  pickerCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.xl,
+    padding: 16,
+    marginBottom: 24,
+    ...shadows.card,
   },
   timeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 32,
   },
   timeSeparator: {
     fontSize: 48,
     fontWeight: '300',
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     marginHorizontal: 8,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#AAA',
+    color: colors.textSecondary,
     marginBottom: 12,
     marginTop: 8,
   },
@@ -239,21 +330,22 @@ const styles = StyleSheet.create({
   },
   dayBtn: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#1E1E2E',
+    paddingVertical: 12,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.card,
     alignItems: 'center',
+    ...shadows.card,
   },
   dayBtnActive: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
   },
   dayText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#888',
+    color: colors.textSecondary,
   },
   dayTextActive: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   modeRow: {
     flexDirection: 'row',
@@ -263,15 +355,16 @@ const styles = StyleSheet.create({
   modeBtn: {
     flex: 1,
     paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: '#1E1E2E',
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.card,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'transparent',
+    ...shadows.card,
   },
   modeBtnActive: {
-    borderColor: '#4CAF50',
-    backgroundColor: '#1a2e1a',
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
   },
   modeIcon: {
     fontSize: 24,
@@ -280,41 +373,43 @@ const styles = StyleSheet.create({
   modeText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#888',
+    color: colors.textSecondary,
   },
   modeTextActive: {
-    color: '#4CAF50',
+    color: colors.primary,
   },
   input: {
-    backgroundColor: '#1E1E2E',
-    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
     padding: 16,
     fontSize: 16,
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     marginBottom: 32,
+    ...shadows.card,
   },
   saveBtn: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 14,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.lg,
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 12,
+    ...shadows.fab,
   },
   saveBtnText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   deleteBtn: {
-    borderRadius: 14,
+    borderRadius: borderRadius.lg,
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#F44336',
+    borderColor: colors.error,
   },
   deleteBtnText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#F44336',
+    color: colors.error,
   },
 });

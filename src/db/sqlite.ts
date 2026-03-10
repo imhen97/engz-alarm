@@ -34,6 +34,47 @@ async function initializeDatabase(database: SQLite.SQLiteDatabase): Promise<void
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS streak_records (
+      date TEXT PRIMARY KEY,
+      completed INTEGER NOT NULL DEFAULT 0,
+      sentence_text TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS sentence_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sentence_id INTEGER NOT NULL,
+      success INTEGER NOT NULL,
+      score REAL NOT NULL,
+      attempted_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS user_progress (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS badges (
+      id TEXT PRIMARY KEY,
+      unlocked_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS pet_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      growth_stage TEXT NOT NULL DEFAULT 'puppy',
+      hunger INTEGER NOT NULL DEFAULT 80,
+      mood TEXT NOT NULL DEFAULT 'normal',
+      last_fed_at TEXT,
+      equipped_hat_id TEXT,
+      equipped_scarf_id TEXT,
+      equipped_background_id TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS inventory (
+      item_id TEXT PRIMARY KEY,
+      item_type TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 0
+    );
   `);
 
   // Migration: add meaning_ko column if upgrading from old schema

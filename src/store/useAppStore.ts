@@ -24,6 +24,10 @@ interface AppState {
   settings: Settings;
   loadSettings: () => Promise<void>;
   updateSetting: (key: string, value: string) => Promise<void>;
+  addCoins: (amount: number) => Promise<void>;
+  feedPet: () => Promise<void>;
+  setPetAccessories: (ids: string[]) => Promise<void>;
+  setOwnedDecorations: (ids: string[]) => Promise<void>;
 
   // Init
   initialized: boolean;
@@ -34,6 +38,14 @@ const DEFAULT_SETTINGS: Settings = {
   default_unlock_mode: 'voice',
   snooze_enabled: true,
   snooze_minutes: 5,
+  user_level: 2,
+  sub_level: 1,
+  selected_packs: ['morning_basics'],
+  user_xp: 0,
+  user_coins: 0,
+  test_completed: false,
+  night_input_time: '22:00',
+  daily_new_sentences: 2,
 };
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -107,6 +119,52 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (row.key === 'snooze_minutes') {
         settings.snooze_minutes = parseInt(row.value, 10) || 5;
       }
+      if (row.key === 'user_level') {
+        settings.user_level = parseInt(row.value, 10) || 2;
+      }
+      if (row.key === 'sub_level') {
+        settings.sub_level = parseInt(row.value, 10) || 1;
+      }
+      if (row.key === 'selected_packs') {
+        try {
+          settings.selected_packs = JSON.parse(row.value);
+        } catch {
+          settings.selected_packs = ['morning_basics'];
+        }
+      }
+      if (row.key === 'user_xp') {
+        settings.user_xp = parseInt(row.value, 10) || 0;
+      }
+      if (row.key === 'user_coins') {
+        settings.user_coins = parseInt(row.value, 10) || 0;
+      }
+      if (row.key === 'pet_last_fed') {
+        settings.pet_last_fed = row.value || undefined;
+      }
+      if (row.key === 'pet_accessories') {
+        try {
+          settings.pet_accessories = JSON.parse(row.value);
+        } catch {
+          settings.pet_accessories = [];
+        }
+      }
+      if (row.key === 'owned_decorations') {
+        try {
+          settings.owned_decorations = JSON.parse(row.value);
+        } catch {
+          settings.owned_decorations = [];
+        }
+      }
+      if (row.key === 'test_completed') {
+        settings.test_completed = row.value === 'true';
+      }
+      if (row.key === 'night_input_time') {
+        settings.night_input_time = row.value || '22:00';
+      }
+      if (row.key === 'daily_new_sentences') {
+        const n = parseInt(row.value, 10);
+        settings.daily_new_sentences = n >= 1 && n <= 3 ? n : 2;
+      }
     }
     set({ settings });
   },
@@ -117,6 +175,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       [key, value]
     );
     await get().loadSettings();
+  },
+  addCoins: async (amount: number) => {
+    const { settings, updateSetting } = get();
+    const next = Math.max(0, (settings.user_coins ?? 0) + amount);
+    await updateSetting('user_coins', next.toString());
+  },
+  feedPet: async () => {
+    await get().updateSetting('pet_last_fed', new Date().toISOString());
+  },
+  setPetAccessories: async (ids: string[]) => {
+    await get().updateSetting('pet_accessories', JSON.stringify(ids));
+  },
+  setOwnedDecorations: async (ids: string[]) => {
+    await get().updateSetting('owned_decorations', JSON.stringify(ids));
   },
 
   // Init

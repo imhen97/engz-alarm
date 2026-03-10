@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet, Text } from 'react-native';
 import { VoiceState } from '../types';
+import { colors } from '../theme';
 
 interface VoiceIndicatorProps {
   state: VoiceState;
@@ -35,30 +36,30 @@ export default function VoiceIndicator({ state }: VoiceIndicatorProps) {
   const getColor = () => {
     switch (state) {
       case 'listening':
-        return '#4CAF50';
+        return colors.primary;
       case 'processing':
-        return '#FFC107';
+        return colors.warning;
       case 'success':
-        return '#2196F3';
+        return colors.success;
       case 'fail':
-        return '#F44336';
+        return colors.error;
       default:
-        return '#666';
+        return colors.textMuted;
     }
   };
 
   const getLabel = () => {
     switch (state) {
       case 'idle':
-        return 'Tap to speak';
+        return '탭하여 말하기';
       case 'listening':
-        return 'Listening...';
+        return '듣고 있어요...';
       case 'processing':
-        return 'Processing...';
+        return '확인 중...';
       case 'success':
-        return 'Great job!';
+        return '잘했어요!';
       case 'fail':
-        return 'Try again';
+        return '다시 시도해보세요';
       default:
         return '';
     }
@@ -85,14 +86,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   circle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     alignItems: 'center',
     justifyContent: 'center',
   },
   icon: {
-    fontSize: 32,
+    fontSize: 36,
   },
   label: {
     fontSize: 16,
